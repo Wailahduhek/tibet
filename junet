@@ -1,0 +1,760 @@
+-- // Vars
+local autofish = false
+local perfectCast = true
+local catchCount = 0
+
+-- // Services
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local player = Players.LocalPlayer
+
+-- // Remotes (disesuaikan game)
+local net = ReplicatedStorage:WaitForChild("Packages")
+    :WaitForChild("_Index")
+    :WaitForChild("sleitnick_net@0.2.0")
+    :WaitForChild("net")
+
+local equipRemote   = net:WaitForChild("RE/EquipToolFromHotbar")
+local rodRemote     = net:WaitForChild("RF/ChargeFishingRod")
+local miniGameRemote= net:WaitForChild("RF/RequestFishingMinigameStarted")
+local finishRemote  = net:WaitForChild("RE/FishingCompleted")
+local baitRemote    = net:WaitForChild("RE/BaitSpawned")
+local fishRemote    = net:WaitForChild("RE/FishCaught")
+
+-- =========================================================
+-- GUI SETUP
+-- =========================================================
+local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+gui.Name = "AutoFishUI"
+gui.ResetOnSpawn = false
+
+local mainFrame = Instance.new("Frame", gui)
+mainFrame.Size = UDim2.new(0, 360, 0, 240)
+mainFrame.Position = UDim2.new(0.5, -180, 0.5, -120)
+mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+mainFrame.BackgroundTransparency = 0.2
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Draggable = true
+
+-- border ungu gradasi
+local uiStroke = Instance.new("UIStroke", mainFrame)
+uiStroke.Thickness = 3
+uiStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+local gradient = Instance.new("UIGradient", uiStroke)
+gradient.Color = ColorSequence.new{
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(170, 0, 255)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(100, 0, 180))
+}
+gradient.Rotation = 45
+
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 12)
+
+-- =========================================================
+-- HEADER
+-- =========================================================
+local header = Instance.new("Frame", mainFrame)
+header.Size = UDim2.new(1, 0, 0, 30)
+header.BackgroundTransparency = 1
+
+local title = Instance.new("TextLabel", header)
+title.Size = UDim2.new(1, -80, 1, 0)
+title.Position = UDim2.new(0, 10, 0, 0)
+title.Text = "Tole Walker 1.3"
+title.TextColor3 = Color3.fromRGB(200, 200, 255)
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.BackgroundTransparency = 1
+title.Font = Enum.Font.GothamBold
+title.TextSize = 16
+
+-- tombol minimize
+local minimizeBtn = Instance.new("TextButton", header)
+minimizeBtn.Size = UDim2.new(0, 24, 0, 24)
+minimizeBtn.Position = UDim2.new(1, -55, 0, 3)
+minimizeBtn.Text = "–"
+minimizeBtn.TextScaled = true
+minimizeBtn.BackgroundColor3 = Color3.fromRGB(50, 0, 100)
+Instance.new("UICorner", minimizeBtn).CornerRadius = UDim.new(1, 0)
+
+-- tombol close
+local closeBtn = Instance.new("TextButton", header)
+closeBtn.Size = UDim2.new(0, 24, 0, 24)
+closeBtn.Position = UDim2.new(1, -28, 0, 3)
+closeBtn.Text = "X"
+closeBtn.TextScaled = true
+closeBtn.BackgroundColor3 = Color3.fromRGB(100, 0, 100)
+Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(1, 0)
+
+-- =========================================================
+-- TAB SYSTEM
+-- =========================================================
+local tabBar = Instance.new("Frame", mainFrame)
+tabBar.Size = UDim2.new(1, -20, 0, 30)
+tabBar.Position = UDim2.new(0, 10, 0, 35)
+tabBar.BackgroundTransparency = 1
+
+local tabs, contents = {}, {}
+
+local function createTab(name, emoji, order)
+    local btn = Instance.new("TextButton", tabBar)
+    btn.Size = UDim2.new(0.25, -5, 1, 0)
+    btn.Position = UDim2.new(0.25 * (order - 1), (order == 1 and 0 or 5), 0, 0)
+    btn.Text = emoji .. " " .. name
+    btn.TextColor3 = Color3.fromRGB(255,255,255)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 14
+    btn.BackgroundColor3 = Color3.fromRGB(40,0,80)
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0,6)
+
+    -- 🔽 ganti ke ScrollingFrame
+    local frame = Instance.new("ScrollingFrame", mainFrame)
+    frame.Size = UDim2.new(1, -20, 1, -80)
+    frame.Position = UDim2.new(0, 10, 0, 70)
+    frame.BackgroundTransparency = 1
+    frame.Visible = false
+    frame.BorderSizePixel = 0
+    frame.ScrollBarThickness = 6
+    frame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    frame.CanvasSize = UDim2.new(0,0,0,0)
+
+    -- 🔽 biar isinya otomatis ke bawah
+    local layout = Instance.new("UIListLayout", frame)
+    layout.Padding = UDim.new(0, 5)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+
+    tabs[name] = btn
+    contents[name] = frame
+end
+
+
+createTab("AutoFish", "", 1)
+createTab("Teleport", "", 2)
+createTab("Settings", "", 3)
+createTab("Misc", "", 4)
+
+local function switchTab(name)
+    for n,f in pairs(contents) do
+        f.Visible = (n == name)
+    end
+end
+switchTab("AutoFish")
+
+for name,btn in pairs(tabs) do
+    btn.MouseButton1Click:Connect(function() switchTab(name) end)
+end
+
+local tabLineTop = Instance.new("Frame", mainFrame)
+tabLineTop.Size = UDim2.new(1, -20, 0, 2)
+tabLineTop.Position = UDim2.new(0, 10, 0, tabBar.Position.Y.Offset - 2)
+tabLineTop.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+tabLineTop.BorderSizePixel = 0
+
+local tabLineBottom = Instance.new("Frame", mainFrame)
+tabLineBottom.Size = UDim2.new(1, -20, 0, 2)
+tabLineBottom.Position = UDim2.new(0, 10, 0, tabBar.Position.Y.Offset + tabBar.Size.Y.Offset + 2)
+tabLineBottom.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+tabLineBottom.BorderSizePixel = 0
+
+local function updateLines()
+    tabLineTop.Position = UDim2.new(0, 10, 0, tabBar.Position.Y.Offset - 2)
+    tabLineBottom.Position = UDim2.new(0, 10, 0, tabBar.Position.Y.Offset + tabBar.Size.Y.Offset + 2)
+end
+
+tabBar:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateLines)
+tabBar:GetPropertyChangedSignal("Position"):Connect(updateLines)
+
+
+-- =========================================================
+-- AUTO FISH LOGIC
+-- =========================================================
+
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
+
+local function stopAll()
+    for _, t in pairs(animator:GetPlayingAnimationTracks()) do
+        t:Stop()
+    end
+end
+local function playAnimation(animId)
+    stopAll()
+    local animation = Instance.new("Animation")
+    animation.AnimationId = animId
+    local track = animator:LoadAnimation(animation)
+    track:Play()
+    return track
+end
+
+local catchCount = 0 -- counter tangkapan
+
+local function sellAllFish(statusLabel)
+    local net = game:GetService("ReplicatedStorage"):WaitForChild("Packages")
+        :WaitForChild("_Index")
+        :WaitForChild("sleitnick_net@0.2.0")
+        :WaitForChild("net")
+    local sellRemote = net:WaitForChild("RF/SellAllItems")
+
+    statusLabel.Text = "Status: 💰 Selling..."
+    statusLabel.TextColor3 = Color3.fromRGB(255, 220, 100)
+
+    pcall(function()
+        sellRemote:InvokeServer()
+    end)
+
+    task.wait(1) -- kasih delay biar keliatan
+    statusLabel.Text = "Status: ✔ Running"
+    statusLabel.TextColor3 = Color3.fromRGB(120, 255, 120)
+end
+
+local finishDelay = 1 
+
+-- Helper: aman untuk InvokeServer
+local function safeInvoke(remote, ...)
+    local tries = 0
+    local result
+    while tries < 3 do -- coba max 3x
+        local success, response = pcall(function()
+            return remote:InvokeServer(...)
+        end)
+        if success then
+            result = response
+            break
+        else
+            warn("Invoke gagal: " .. tostring(remote) .. " | Ulangi (" .. tries .. ")")
+            task.wait(1 + tries) -- retry dengan delay bertingkat
+        end
+        tries += 1
+    end
+    return result
+end
+
+-- Helper: aman untuk FireServer
+local function safeFire(remote, ...)
+    local tries = 0
+    while tries < 3 do
+        local success, err = pcall(function()
+            remote:FireServer(...)
+        end)
+        if success then
+            break -- sukses keluar loop
+        else
+            warn("Fire gagal: " .. tostring(remote) .. " | Ulangi (" .. tries .. ") | Err: " .. tostring(err))
+            task.wait(1 + tries)
+        end
+        tries += 1
+    end
+end
+
+-- Start Fishing
+local function startFishing(statusLabel)
+    if autofish then return end
+    autofish = true
+    statusLabel.Text = "Status: ✔ Running"
+    statusLabel.TextColor3 = Color3.fromRGB(120, 255, 120)
+
+    task.spawn(function()
+        pcall(function()
+            safeFire(equipRemote, 1) -- ganti jadi safeFire
+            task.wait(1)
+
+            while autofish do
+                pcall(function()
+                    -- Cast fishing rod
+                    local timestamp = perfectCast and 9999999999 or (tick() + math.random())
+                    safeInvoke(rodRemote, timestamp)
+
+                    task.wait(0.2 + math.random()*0.3)
+
+                    local reelTrack = playAnimation("rbxassetid://134965425664034")
+                    safeInvoke(miniGameRemote, -1.238, 0.969)
+
+                    task.wait(0.5)
+
+                    -- Dummy connections
+                    local baitConn = baitRemote.OnClientEvent:Connect(function() end)
+                    local fishConn = fishRemote.OnClientEvent:Connect(function() end)
+
+                    task.wait(finishDelay)
+
+                    if reelTrack then reelTrack:Stop() end
+                    safeFire(finishRemote) -- ganti jadi safeFire
+
+                    baitConn:Disconnect()
+                    fishConn:Disconnect()
+
+                    -- Update catch count
+                    catchCount += 1
+                    statusLabel.Text = "Status: Catch " .. catchCount
+                    statusLabel.TextColor3 = Color3.fromRGB(120, 255, 120)
+
+                    -- Auto sell tiap 1000
+                    if catchCount >= 1000 then
+                        sellAllFish(statusLabel)
+                        catchCount = 0
+                    end
+                end)
+
+                task.wait(0.5 + math.random()*0.3) -- jangan spam terlalu cepat
+            end
+        end)
+    end)
+end
+
+
+local function stopFishing(statusLabel)
+    autofish = false
+    statusLabel.Text = "Status: X Not Running"
+    statusLabel.TextColor3 = Color3.fromRGB(255, 120, 120)
+end
+-- =========================================================
+-- AUTO FISH TAB UI
+-- =========================================================
+local autoTab = contents["AutoFish"]
+
+local statusLabel = Instance.new("TextLabel", autoTab)
+statusLabel.Size = UDim2.new(1, 0, 0, 25)
+statusLabel.Position = UDim2.new(0, 0, 0, 10)
+statusLabel.Text = "Status: X Not Running"
+statusLabel.TextColor3 = Color3.fromRGB(255, 120, 120)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Font = Enum.Font.Gotham
+statusLabel.TextSize = 14
+
+local function createButton(text, posY, callback, parent)
+    local btn = Instance.new("TextButton", parent)
+    btn.Size = UDim2.new(1, 0, 0, 30)
+    btn.Position = UDim2.new(0, 0, 0, posY)
+    btn.Text = text
+    btn.BackgroundColor3 = Color3.fromRGB(40, 0, 80)
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 14
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+    btn.MouseButton1Click:Connect(callback)
+end
+
+createButton("✔ Start Fishing", 40, function()
+    startFishing(statusLabel)
+end, autoTab)
+
+createButton("X Stop Fishing", 80, function()
+    stopFishing(statusLabel)
+end, autoTab)
+
+-- =========================================================
+-- OTHER TABS
+-- =========================================================
+-- Teleport
+local tpTab = contents["Teleport"]
+local tpLabel = Instance.new("TextLabel", tpTab)
+tpLabel.Size = UDim2.new(1,0,0,25)
+tpLabel.Position = UDim2.new(0,0,0,10)
+tpLabel.Text = "Teleport to:"
+tpLabel.TextColor3 = Color3.fromRGB(200,200,255)
+tpLabel.BackgroundTransparency = 1
+tpLabel.Font = Enum.Font.Gotham
+tpLabel.TextSize = 14
+
+local teleportSpots = {
+    {pos = Vector3.new(987.6, 1.7, 5141.6), lookDir = Vector3.new(0, 0, -1)}, 
+    {pos = Vector3.new(1015.5, 1.7, 5147.2), lookDir = Vector3.new(0, 0, -1)},
+    {pos = Vector3.new(1008.6, 1.9, 5148.4), lookDir = Vector3.new(0, 0, -1)},
+    {pos = Vector3.new(997.9, 1.5, 5146.9), lookDir = Vector3.new(0, 0, -1)}, 
+    {pos = Vector3.new(1041.3, 2.0, 5142.0), lookDir = Vector3.new(-0.42, -0.00, -0.91)},
+    {pos = Vector3.new(950.3, 2.6, 5116.6), lookDir = Vector3.new(0.73, 0.00, -0.69)},
+    {pos = Vector3.new(1072.7, 3.5, 5097.7), lookDir = Vector3.new(-0.97, 0.00, -0.26)},
+}
+
+local teleportOcean = {
+    {pos = Vector3.new(1754.5, 2.3, 3348.4), lookDir = Vector3.new(0.98, -0.00, -0.21)},
+    {pos = Vector3.new(1757.6, 2.3, 3354.8), lookDir = Vector3.new(1.00, 0.00, -0.07)},
+    {pos = Vector3.new(1760.4, 2.3, 3363.0), lookDir = Vector3.new(1.00, -0.00, 0.00)},
+    {pos = Vector3.new(1771.3, 3.0, 3379.0), lookDir = Vector3.new(0.53, 0.00, -0.85)},
+    {pos = Vector3.new(1795.2, 4.1, 3382.6), lookDir = Vector3.new(0.44, 0.00, -0.90)},
+    {pos = Vector3.new(1825.4, 2.3, 3381.3), lookDir = Vector3.new(0.05, -0.00, -1.00)},
+    {pos = Vector3.new(1857.4, 4.3, 3377.2), lookDir = Vector3.new(-0.59, -0.00, -0.80)},
+}
+local teleportSisyphus = {
+    {pos = Vector3.new(-3713.5, -135.1, -1013.1), lookDir = Vector3.new(-0.22, -0.00, 0.98)},
+    {pos = Vector3.new(-3740.1, -135.1, -1009.4), lookDir = Vector3.new(0.49, 0.00, 0.87)},
+    {pos = Vector3.new(-3757.4, -135.1, -1000.0), lookDir = Vector3.new(0.48, -0.00, 0.88)},
+    {pos = Vector3.new(-3674.4, -135.1, -995.5), lookDir = Vector3.new(-0.62, 0.00, 0.78)},
+    {pos = Vector3.new(-3657.1, -134.1, -959.3), lookDir = Vector3.new(-0.98, -0.00, 0.20)},
+    {pos = Vector3.new(-3691.2, -135.1, -892.4), lookDir = Vector3.new(-0.24, -0.00, -0.97)},
+    {pos = Vector3.new(-3705.0, -135.1, -885.3), lookDir = Vector3.new(-0.35, -0.00, -0.93)},
+}
+
+local teleportFisherman = {
+    {pos = Vector3.new(34.2, 1.9, 2759.7), lookDir = Vector3.new(-0.23, -0.00, -0.97)},
+    {pos = Vector3.new(149.0, 2.6, 2785.0), lookDir = Vector3.new(0.76, 0.00, -0.65)},
+    {pos = Vector3.new(197.1, 2.7, 2796.6), lookDir = Vector3.new(0.71, -0.00, -0.70)},
+    {pos = Vector3.new(224.9, 2.2, 2831.8), lookDir = Vector3.new(0.97, 0.00, -0.26)},
+    {pos = Vector3.new(241.9, 2.5, 2895.3), lookDir = Vector3.new(0.87, -0.00, -0.49)},
+    {pos = Vector3.new(-120.3, 3.3, 2948.9), lookDir = Vector3.new(-0.83, 0.00, -0.55)},
+    {pos = Vector3.new(-114.6, 3.3, 2929.4), lookDir = Vector3.new(-0.60, -0.00, -0.80)},
+}
+
+local teleportKohana = {
+    {pos = Vector3.new(-629.3, 30.0, 99.0), lookDir = Vector3.new(0, 0, -1)},
+    {pos = Vector3.new(-629.3, 30.0, 99.8), lookDir = Vector3.new(0, 0, -1)},
+    {pos = Vector3.new(-629.3, 30.0, 99.6), lookDir = Vector3.new(0, 0, -1)},
+    {pos = Vector3.new(-629.3, 30.0, 99.4), lookDir = Vector3.new(0, 0, -1)},
+}
+
+
+-- Tombol teleport manual
+createButton("Crater Island", 40, function()
+    local plr = game.Players.LocalPlayer
+    local spot = teleportSpots[math.random(1, #teleportSpots)]
+    plr.Character:SetPrimaryPartCFrame(CFrame.new(
+        spot.pos,
+        spot.pos + spot.lookDir
+    ))
+end, tpTab)
+
+createButton("Ocean", 80, function()
+    local plr = game.Players.LocalPlayer
+    local spot = teleportOcean[math.random(1, #teleportOcean)]
+    plr.Character:SetPrimaryPartCFrame(CFrame.new(
+        spot.pos,
+        spot.pos + spot.lookDir
+    ))
+end, tpTab)
+
+createButton("Sisyphus", 120, function()
+    local plr = game.Players.LocalPlayer
+    local spot = teleportSisyphus[math.random(1, #teleportSisyphus)]
+    plr.Character:SetPrimaryPartCFrame(CFrame.new(
+        spot.pos,
+        spot.pos + spot.lookDir
+    ))
+end, tpTab)
+
+createButton("Fisherman Island", 160, function()
+    local plr = game.Players.LocalPlayer
+    local spot = teleportFisherman[math.random(1, #teleportFisherman)]
+    plr.Character:SetPrimaryPartCFrame(CFrame.new(
+        spot.pos,
+        spot.pos + spot.lookDir
+    ))
+end, tpTab)
+
+createButton("Kohana Volcano", 200, function()
+    local plr = game.Players.LocalPlayer
+    local spot = teleportKohana[math.random(1, #teleportKohana)]
+    plr.Character:SetPrimaryPartCFrame(CFrame.new(
+        spot.pos,
+        spot.pos + spot.lookDir
+    ))
+end, tpTab)
+
+-- Settings Tab
+local setTab = contents["Settings"]
+
+-- Function buat bikin tombol
+local function createButton(text, posY, callback, parent)
+    local btn = Instance.new("TextButton", parent)
+    btn.Size = UDim2.new(1, 0, 0, 30)
+    btn.Position = UDim2.new(0, 0, 0, posY)
+    btn.Text = text
+    btn.BackgroundColor3 = Color3.fromRGB(40, 0, 80)
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 14
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+    btn.MouseButton1Click:Connect(callback)
+    return btn
+end
+
+-- 🔹 Label status Auto Weather (paling atas Y = 10)
+local autoWeather = false
+local autoWeatherLabel = Instance.new("TextLabel", setTab)
+autoWeatherLabel.Size = UDim2.new(1, 0, 0, 25)
+autoWeatherLabel.Position = UDim2.new(0, 0, 0, 10)
+autoWeatherLabel.Text = "Status: 🔴 Off"
+autoWeatherLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+autoWeatherLabel.BackgroundTransparency = 1
+autoWeatherLabel.Font = Enum.Font.Gotham
+autoWeatherLabel.TextSize = 14
+
+-- 🔹 Helper function update label
+local function updateAutoWeatherLabel(tempText, duration)
+    if tempText then
+        autoWeatherLabel.Text = tempText
+        if duration then
+            task.delay(duration, function()
+                autoWeatherLabel.Text = autoWeather and "Status: 🟢 On" or "Status: 🔴 Off"
+            end)
+        end
+    else
+        autoWeatherLabel.Text = autoWeather and "Status: 🟢 On" or "Status: 🔴 Off"
+    end
+end
+
+-- Button 1: Rejoin Server (mulai dari Y = 40)
+createButton("Rejoin Server", 40, function()
+    local ts = game:GetService("TeleportService")
+    local lp = game:GetService("Players").LocalPlayer
+    ts:Teleport(game.PlaceId, lp)
+end, setTab)
+
+-- Button 2: Sell All Fish (Y = 80)
+createButton("Sell All Fish", 80, function()
+    local net = game:GetService("ReplicatedStorage"):WaitForChild("Packages")
+        :WaitForChild("_Index"):WaitForChild("sleitnick_net@0.2.0"):WaitForChild("net")
+    local sellRemote = net:WaitForChild("RF/SellAllItems")
+    pcall(function()
+        sellRemote:InvokeServer()
+        updateAutoWeatherLabel("✅ Items Sold!", 2)
+    end)
+end, setTab)
+
+-- Button 3: Auto Weather (Y = 120)
+createButton("Auto Weather", 120, function()
+    autoWeather = not autoWeather
+    updateAutoWeatherLabel()
+
+    if autoWeather then
+        task.spawn(function()
+            local eventsFolder = game:GetService("ReplicatedStorage"):WaitForChild("Events")
+            local weathers = {}
+            for _, eventModule in ipairs(eventsFolder:GetChildren()) do
+                if eventModule:IsA("ModuleScript") then
+                    local success, eventData = pcall(require, eventModule)
+                    if success and eventData and type(eventData) == "table" then
+                        local weatherInfo = {
+                            Name = eventData.Name or eventModule.Name,
+                            Price = eventData.WeatherMachinePrice or 0,
+                            Desc = eventData.Description or "No description",
+                        }
+                        table.insert(weathers, weatherInfo)
+                    end
+                end
+            end
+
+            local allowedWeathers = {["Radiant"]=true, ["Storm"]=true, ["Wind"]=true}
+            local autoWeatherWeathers = {}
+            for _, w in ipairs(weathers) do
+                if allowedWeathers[w.Name] then
+                    table.insert(autoWeatherWeathers, w)
+                end
+            end
+
+            local net = game:GetService("ReplicatedStorage"):WaitForChild("Packages")
+                :WaitForChild("_Index"):WaitForChild("sleitnick_net@0.2.0"):WaitForChild("net")
+            local weatherRemote = net:WaitForChild("RF/PurchaseWeatherEvent")
+
+            local index = 1
+            while autoWeather and #autoWeatherWeathers > 0 do
+                local weatherName = autoWeatherWeathers[index].Name
+                pcall(function()
+                    weatherRemote:InvokeServer(weatherName)
+                end)
+                index = index + 1
+                if index > #autoWeatherWeathers then index = 1 end
+                task.wait(2)
+            end
+        end)
+    end
+end, setTab)
+
+-- =========================================================
+-- MISC TAB
+-- =========================================================
+local MiscTab = contents["Misc"]
+
+local delayRow = Instance.new("Frame", MiscTab)
+delayRow.Size = UDim2.new(1, 0, 0, 25)
+delayRow.BackgroundTransparency = 1
+
+local delayLabel = Instance.new("TextLabel", delayRow)
+delayLabel.AnchorPoint = Vector2.new(0,0.5)
+delayLabel.Position = UDim2.new(0,10,0.5,10)
+delayLabel.Size = UDim2.new(0.7, 0, 1, 0) 
+delayLabel.Text = "Finish Delay (sec):"
+delayLabel.TextColor3 = Color3.fromRGB(200,200,200)
+delayLabel.BackgroundTransparency = 1
+delayLabel.Font = Enum.Font.Gotham
+delayLabel.TextSize = 14
+delayLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local delayBox = Instance.new("TextBox", delayRow)
+delayBox.AnchorPoint = Vector2.new(1,0.5)
+delayBox.Position = UDim2.new(1, -20, 0.5, 10)
+delayBox.Size = UDim2.new(0, 60, 0.8, 0)
+delayBox.BackgroundColor3 = Color3.fromRGB(40, 0, 80)
+delayBox.BackgroundTransparency = 0.5 
+delayBox.TextColor3 = Color3.fromRGB(255,255,255)
+delayBox.Text = tostring(finishDelay)
+delayBox.ClearTextOnFocus = false
+delayBox.Font = Enum.Font.Code
+delayBox.TextSize = 14
+delayBox.BorderSizePixel = 1
+delayBox.BorderColor3 = Color3.fromRGB(255,255,255)
+
+delayBox.FocusLost:Connect(function(enterPressed)
+    local val = tonumber(delayBox.Text)
+    if val and val > 0 then
+        finishDelay = val
+    else
+        delayBox.Text = tostring(finishDelay)
+    end
+end)
+-- =========================
+-- Rods Shop
+-- =========================
+local rods = {
+    ["Luck Rod"] = {id = 79, price = "350 Coins"},
+    ["Carbon Rod"] = {id = 76, price = "900 Coins"},
+    ["Grass Rod"] = {id = 85, price = "1.5k Coins"},
+    ["Demascus Rod"] = {id = 77, price = "3k Coins"},
+    ["Ice Rod"] = {id = 78, price = "5k Coins"},
+    ["Lucky Rod"] = {id = 4, price = "15k Coins"},
+    ["Midnight Rod"] = {id = 80, price = "50k Coins"},
+    ["Steampunk Rod"] = {id = 6, price = "215k Coins"},
+    ["Chrome Rod"] = {id = 7, price = "437k Coins"},
+    ["Astral Rod"] = {id = 5, price = "1M Coins"},
+    ["Ares Rod"] = {id = 126, price = "3M Coins"},
+    ["Angler Rod"] = {id = 168, price = "8M Coins"},
+}
+
+local selectedRod = "Steampunk Rod"
+
+-- Posisi Y baris rod
+local rodRowY = delayRow.Position.Y.Offset + delayRow.Size.Y.Offset + 10
+
+-- Frame untuk tombol Select Rod + Buy
+local rodRow = Instance.new("Frame", MiscTab)
+rodRow.Size = UDim2.new(1, -20, 0, 30)
+rodRow.Position = UDim2.new(0, 10, 0, rodRowY)
+rodRow.BackgroundTransparency = 1
+
+-- Tombol Select Rod
+local rodDropdown = Instance.new("TextButton", rodRow)
+rodDropdown.Size = UDim2.new(0,175,0,30)
+rodDropdown.Position = UDim2.new(0,0,0,0)
+rodDropdown.Text = "🎣 "..selectedRod.." ("..rods[selectedRod].price..")"
+rodDropdown.BackgroundColor3 = Color3.fromRGB(40,0,80)
+rodDropdown.TextColor3 = Color3.fromRGB(255,255,255)
+rodDropdown.Font = Enum.Font.GothamBold
+rodDropdown.TextSize = 14
+Instance.new("UICorner", rodDropdown).CornerRadius = UDim.new(0,6)
+
+-- Tombol Buy
+local buyBtn = Instance.new("TextButton", rodRow)
+buyBtn.Size = UDim2.new(0,150,0,30)
+buyBtn.Position = UDim2.new(0, rodDropdown.Size.X.Offset + 10, 0, 0)
+buyBtn.Text = "🛒 Buy Selected Rod"
+buyBtn.BackgroundColor3 = Color3.fromRGB(80,0,120)
+buyBtn.TextColor3 = Color3.fromRGB(255,255,255)
+buyBtn.Font = Enum.Font.GothamBold
+buyBtn.TextSize = 14
+Instance.new("UICorner", buyBtn).CornerRadius = UDim.new(0,6)
+buyBtn.Visible = false
+-- Popup dropdown mini (overlay)
+local popupDropdown = Instance.new("Frame", MiscTab)
+popupDropdown.Size = UDim2.new(0, 180, 0, 0)
+popupDropdown.Position = UDim2.new(0, rodDropdown.Position.X.Offset, 0, rodDropdown.Position.Y.Offset + rodDropdown.Size.Y.Offset + 5)
+popupDropdown.BackgroundColor3 = Color3.fromRGB(0,0,0)
+popupDropdown.BackgroundTransparency = 0.7 -- gelap transparan
+popupDropdown.Visible = false
+Instance.new("UICorner", popupDropdown).CornerRadius = UDim.new(0,6)
+
+-- Border hitam
+local border = Instance.new("UIStroke", popupDropdown)
+border.Thickness = 2
+border.Color = Color3.fromRGB(30,30,30)
+
+-- Layout tombol di tengah
+local layout = Instance.new("UIListLayout", popupDropdown)
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+layout.Padding = UDim.new(0,2)
+layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+-- Rods yang ingin ditampilkan
+local displayedRods = {"Steampunk Rod","Astral Rod","Ares Rod","Angler Rod","Midnight Rod","Chrome Rod"}
+
+-- Tambahkan tombol ke popup
+for _, rodName in ipairs(displayedRods) do
+    local data = rods[rodName]
+    local btn = Instance.new("TextButton", popupDropdown)
+    btn.Size = UDim2.new(0.9,0,0,25) -- 90% lebar frame popup
+    btn.AnchorPoint = Vector2.new(0.5,0)
+    btn.Position = UDim2.new(0.5,0,0,0)
+    btn.Text = rodName.." ("..data.price..")"
+    btn.BackgroundColor3 = Color3.fromRGB(60,0,100)
+    btn.TextColor3 = Color3.fromRGB(255,255,255)
+    btn.Font = Enum.Font.Gotham
+    btn.TextSize = 13
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0,4)
+
+    btn.MouseButton1Click:Connect(function()
+        selectedRod = rodName
+        rodDropdown.Text = "🎣 "..rodName.." ("..data.price..")"
+        popupDropdown.Visible = false
+        buyBtn.Visible = true
+    end)
+end
+
+-- Toggle popup mini
+rodDropdown.MouseButton1Click:Connect(function()
+    popupDropdown.Visible = not popupDropdown.Visible
+    buyBtn.Visible = false
+    if popupDropdown.Visible then
+        local count = #displayedRods
+        popupDropdown.Size = UDim2.new(0, 180, 0, count*27)
+    else
+        popupDropdown.Size = UDim2.new(0,180,0,0)
+    end
+end)
+
+
+-- Tombol Buy action
+buyBtn.MouseButton1Click:Connect(function()
+    local rodData = rods[selectedRod]
+    if rodData then
+        pcall(function()
+            local rodRemote = net:WaitForChild("RF/PurchaseFishingRod")
+            rodRemote:InvokeServer(rodData.id)
+        end)
+    end
+end)
+
+-- =========================================================
+-- MINIMIZE & CLOSE
+-- =========================================================
+local minimized = false
+
+minimizeBtn.MouseButton1Click:Connect(function()
+    minimized = not minimized
+
+    if minimized then
+        tabBar.Visible = false
+        tabLineTop.Visible = false
+        tabLineBottom.Visible = false
+        
+        for _, f in pairs(contents) do
+            f.Visible = false
+        end
+
+        mainFrame.Size = UDim2.new(0, 200, 0, 40)
+        mainFrame.Position = UDim2.new(0.5, -100, 0, 10)
+    else
+        tabBar.Visible = true
+        tabLineTop.Visible = true
+        tabLineBottom.Visible = true
+        
+        mainFrame.Size = UDim2.new(0, 360, 0, 240)
+        mainFrame.Position = UDim2.new(0.5, -180, 0, 100)
+
+        switchTab("AutoFish")
+    end
+end)
+
+closeBtn.MouseButton1Click:Connect(function()
+    gui:Destroy()
+    autofish = false
+end)
