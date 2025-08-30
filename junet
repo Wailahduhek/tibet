@@ -209,7 +209,7 @@ local function sellAllFish(statusLabel)
     statusLabel.TextColor3 = Color3.fromRGB(120, 255, 120)
 end
 
-local finishDelay = 1 
+local finishDelay = 3
 
 -- Helper: aman untuk InvokeServer
 local function safeInvoke(remote, ...)
@@ -277,7 +277,7 @@ local function startFishing(statusLabel)
                     local baitConn = baitRemote.OnClientEvent:Connect(function() end)
                     local fishConn = fishRemote.OnClientEvent:Connect(function() end)
 
-                    task.wait(finishDelay)
+                    task.wait(finishDelay + math.random()*0.5)
 
                     if reelTrack then reelTrack:Stop() end
                     safeFire(finishRemote) -- ganti jadi safeFire
