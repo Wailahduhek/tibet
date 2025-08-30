@@ -209,46 +209,8 @@ local function sellAllFish(statusLabel)
     statusLabel.TextColor3 = Color3.fromRGB(120, 255, 120)
 end
 
-local finishDelay = 3
+local finishDelay = 1 
 
--- Helper: aman untuk InvokeServer
-local function safeInvoke(remote, ...)
-    local tries = 0
-    local result
-    while tries < 3 do -- coba max 3x
-        local success, response = pcall(function()
-            return remote:InvokeServer(...)
-        end)
-        if success then
-            result = response
-            break
-        else
-            warn("Invoke gagal: " .. tostring(remote) .. " | Ulangi (" .. tries .. ")")
-            task.wait(1 + tries) -- retry dengan delay bertingkat
-        end
-        tries += 1
-    end
-    return result
-end
-
--- Helper: aman untuk FireServer
-local function safeFire(remote, ...)
-    local tries = 0
-    while tries < 3 do
-        local success, err = pcall(function()
-            remote:FireServer(...)
-        end)
-        if success then
-            break -- sukses keluar loop
-        else
-            warn("Fire gagal: " .. tostring(remote) .. " | Ulangi (" .. tries .. ") | Err: " .. tostring(err))
-            task.wait(1 + tries)
-        end
-        tries += 1
-    end
-end
-
--- Start Fishing
 local function startFishing(statusLabel)
     if autofish then return end
     autofish = true
@@ -257,47 +219,33 @@ local function startFishing(statusLabel)
 
     task.spawn(function()
         pcall(function()
-            safeFire(equipRemote, 1) -- ganti jadi safeFire
+            equipRemote:FireServer(1) 
             task.wait(1)
-
             while autofish do
                 pcall(function()
-                    -- Cast fishing rod
                     local timestamp = perfectCast and 9999999999 or (tick() + math.random())
-                    safeInvoke(rodRemote, timestamp)
-
-                    task.wait(0.2 + math.random()*0.3)
-
+                    rodRemote:InvokeServer(timestamp)
+                    task.wait(0.1)
                     local reelTrack = playAnimation("rbxassetid://134965425664034")
-                    safeInvoke(miniGameRemote, -1.238, 0.969)
-
-                    task.wait(0.5)
-
-                    -- Dummy connections
+                    miniGameRemote:InvokeServer(-1.238,0.969)
+                    local reelTrack = playAnimation("rbxassetid://134965425664034")
+                    task.wait(0.3)
                     local baitConn = baitRemote.OnClientEvent:Connect(function() end)
                     local fishConn = fishRemote.OnClientEvent:Connect(function() end)
-
-                    task.wait(finishDelay + math.random()*0.5)
-
-                    if reelTrack then reelTrack:Stop() end
-                    safeFire(finishRemote) -- ganti jadi safeFire
-
+                    task.wait(finishDelay)
+                    reelTrack:Stop()
+                    finishRemote:FireServer()
                     baitConn:Disconnect()
                     fishConn:Disconnect()
-
-                    -- Update catch count
                     catchCount += 1
                     statusLabel.Text = "Status: Catch " .. catchCount
                     statusLabel.TextColor3 = Color3.fromRGB(120, 255, 120)
-
-                    -- Auto sell tiap 1000
                     if catchCount >= 1000 then
                         sellAllFish(statusLabel)
                         catchCount = 0
                     end
                 end)
-
-                task.wait(0.5 + math.random()*0.3) -- jangan spam terlalu cepat
+                task.wait(0.5)
             end
         end)
     end)
